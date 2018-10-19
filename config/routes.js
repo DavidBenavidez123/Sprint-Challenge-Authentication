@@ -1,6 +1,11 @@
 const axios = require('axios');
 
-const { authenticate } = require('./middlewares');
+const { authenticate,generateToken } = require('./middlewares');
+const bcrypt = require('bcryptjs');
+const knex = require('knex')
+const knexConfig = require('../knexfile.js')
+const db = knex(knexConfig.development)
+
 
 module.exports = server => {
   server.post('/api/register', register);
@@ -8,12 +13,43 @@ module.exports = server => {
   server.get('/api/jokes', authenticate, getJokes);
 };
 
+
+
+
 function register(req, res) {
   // implement user registration
+  const credentials = req.body;
+
+  const hash = bcrypt.hashSync(credentials.password, 10);
+  credentials.password = hash;
+
+  db('users')
+    .insert(credentials)
+    .then(ids => {
+      const id = ids[0];
+      res.status(201).json({ newUserId: id });
+    })
+    .catch(err => {
+      res.status(500).json(err);
+    });
 }
 
 function login(req, res) {
   // implement user login
+  const creds = req.body;
+	db("users")
+		.where({ username: creds.username })
+		.first()
+		.then(user => {
+			if (user && bcrypt.compareSync(creds.password, user.password)) {
+				const token = generateToken(user);
+				res.status(200).json({ welcome: user.username, token });
+			} else {
+				res
+					.status(500)
+					.json({ error: "Wrong Username and/or Password, please try again" });
+			}
+		});
 }
 
 function getJokes(req, res) {
